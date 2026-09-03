@@ -36,8 +36,8 @@ export function Precipitation({ kind }: Props) {
     const arr = attr.array as Float32Array;
     const t = state.clock.elapsedTime;
     for (let i = 0; i < count; i++) {
-      arr[i * 3 + 1] -= (speeds[i] ?? 5) * dt;
-      if (snow) arr[i * 3] += Math.sin(t * 0.8 + i) * 0.01;
+      arr[i * 3 + 1] = (arr[i * 3 + 1] ?? 0) - (speeds[i] ?? 5) * dt;
+      if (snow) arr[i * 3] = (arr[i * 3] ?? 0) + Math.sin(t * 0.8 + i) * 0.01;
       if ((arr[i * 3 + 1] ?? 0) < -3) {
         arr[i * 3 + 1] = 14 + Math.random() * 3;
         arr[i * 3] = (Math.random() - 0.5) * 30;
