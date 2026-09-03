@@ -1,29 +1,33 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, ClientOnly } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { SkyScene } from "@/components/SkyScene";
-import { CitySearch } from "@/components/CitySearch";
+import { CityPicker } from "@/components/CityPicker";
+import { DayParts } from "@/components/DayParts";
 import {
-  dayName,
-  fetchForecast,
-  weatherInfo,
-  type GeoResult,
-} from "@/lib/weather";
+  buildDayParts,
+  currentDayPart,
+  DAY_PART_KEYS,
+  type DayPartKey,
+} from "@/lib/dayparts";
+import { dayName, fetchForecast, weatherInfo, type GeoResult } from "@/lib/weather";
+
+const SkyScene3D = lazy(() => import("@/components/sky3d/SkyScene3D"));
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "GüneşPusula — Animasyonlu Hava Durumu" },
+      { title: "GüneşPusula — 3D Animasyonlu Hava Durumu" },
       {
         name: "description",
         content:
-          "Canlı gökyüzü animasyonlarıyla anlık hava durumu, saatlik ve 7 günlük tahmin. Dünyanın her şehri için ücretsiz ve hızlı.",
+          "Gerçek 3D bulutlar, hareket eden güneş ve sabah-öğlen-akşam-gece geçişleriyle canlı hava durumu. Şehrini seç, anlık, saatlik ve 7 günlük tahmini gör.",
       },
-      { property: "og:title", content: "GüneşPusula — Animasyonlu Hava Durumu" },
+      { property: "og:title", content: "GüneşPusula — 3D Animasyonlu Hava Durumu" },
       {
         property: "og:description",
         content:
-          "Hareketli güneş ve bulutlarla eğlenceli hava durumu paneli. Anlık, saatlik ve 7 günlük tahmin.",
+          "3D gökyüzü sahnesi, gün içi hava geçişleri ve 7 günlük tahmin. Şehir seçici ile dünyanın her yerinde.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -48,8 +52,39 @@ const DEFAULT_CITY: GeoResult = {
   longitude: 28.9497,
 };
 
+const STORAGE_KEY = "gunespusula.city";
+
+const SUN_PHASE: Record<DayPartKey, number> = {
+  morning: 0.18,
+  noon: 0.52,
+  evening: 0.88,
+  night: 1.3,
+};
+
 function Index() {
   const [city, setCity] = useState<GeoResult>(DEFAULT_CITY);
+  const [dayIndex, setDayIndex] = useState(0);
+  const [part, setPart] = useState<DayPartKey>("noon");
+  const [auto, setAuto] = useState(true);
+  const [userPicked, setUserPicked] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) setCity(JSON.parse(raw) as GeoResult);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function selectCity(next: GeoResult) {
+    setCity(next);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["forecast", city.latitude, city.longitude],
@@ -60,6 +95,27 @@ function Index() {
   const code = data?.current.weather_code ?? 0;
   const isDay = data ? data.current.is_day === 1 : true;
   const info = weatherInfo(code, isDay);
+
+  // İlk veri geldiğinde günün gerçek bölümünü seç
+  useEffect(() => {
+    if (data && !userPicked) setPart(currentDayPart(data.current.is_day === 1));
+  }, [data, userPicked]);
+
+  // Otomatik gün animasyonu: sabah → öğlen → akşam → gece
+  useEffect(() => {
+    if (!auto) return;
+    const t = setInterval(() => {
+      setPart((p) => {
+        const i = DAY_PART_KEYS.indexOf(p);
+        return DAY_PART_KEYS[(i + 1) % DAY_PART_KEYS.length] ?? "noon";
+      });
+    }, 4000);
+    return () => clearInterval(t);
+  }, [auto]);
+
+  const parts = useMemo(() => buildDayParts(data, dayIndex), [data, dayIndex]);
+  const activePart = parts.find((p) => p.key === part) ?? parts[1];
+  const sceneCode = activePart?.code ?? code;
 
   const nowIndex = data
     ? Math.max(
@@ -77,7 +133,11 @@ function Index() {
 
   return (
     <div className="relative min-h-screen overflow-hidden font-body">
-      <SkyScene code={code} isDay={isDay} />
+      <ClientOnly fallback={<SkyScene code={sceneCode} isDay={part !== "night"} />}>
+        <Suspense fallback={<SkyScene code={sceneCode} isDay={part !== "night"} />}>
+          <SkyScene3D code={sceneCode} part={part} sunPhase={SUN_PHASE[part]} />
+        </Suspense>
+      </ClientOnly>
 
       <div className="relative z-10 mx-auto max-w-6xl px-6 py-8">
         <header className="flex flex-wrap items-center justify-between gap-4">
@@ -89,24 +149,25 @@ function Index() {
               <h1 className="font-display text-xl font-bold leading-none text-deep">
                 GüneşPusula
               </h1>
-              <p className="text-xs font-semibold text-deep/60">Canlı gökyüzü paneli</p>
+              <p className="text-xs font-semibold text-deep/60">3D canlı gökyüzü paneli</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <CitySearch onSelect={setCity} current={city.name} />
-            <div className="grid place-items-center rounded-full bg-white/70 px-3 py-2 text-sm font-semibold text-deep shadow-sm shadow-sunset/20">
-              °C
-            </div>
+          <div className="rounded-full bg-white/70 px-4 py-2 text-sm font-bold text-deep shadow-sm shadow-sunset/20">
+            {city.name} · °C
           </div>
         </header>
 
+        <div className="mt-6">
+          <CityPicker onSelect={selectCity} current={city} />
+        </div>
+
         {isError && (
-          <p className="mt-10 rounded-3xl bg-white/80 p-6 text-center font-semibold text-deep">
+          <p className="mt-6 rounded-3xl bg-white/80 p-6 text-center font-semibold text-deep">
             Hava durumu verisi alınamadı. Lütfen tekrar deneyin.
           </p>
         )}
 
-        <main className="mt-10 grid grid-cols-12 gap-6">
+        <main className="mt-6 grid grid-cols-12 gap-6">
           <section className="col-span-12 lg:col-span-7">
             <div className="relative overflow-hidden rounded-[2.5rem] bg-white/75 p-8 shadow-2xl shadow-sunset/40 ring-1 ring-white/60">
               <div className="flex items-center justify-between gap-3">
@@ -210,23 +271,42 @@ function Index() {
           </section>
 
           <section className="col-span-12">
+            <DayParts
+              parts={parts}
+              active={part}
+              onSelect={(k) => {
+                setPart(k);
+                setUserPicked(true);
+                setAuto(false);
+              }}
+              dayLabel={
+                data ? dayName(data.daily.time[dayIndex] ?? "", dayIndex) : "Bugün"
+              }
+              auto={auto}
+              onToggleAuto={() => setAuto((a) => !a)}
+            />
+          </section>
+
+          <section className="col-span-12">
             <div className="rounded-[2.5rem] bg-white/75 p-6 shadow-2xl shadow-sunset/40 ring-1 ring-white/60">
               <div className="mb-5 flex items-center justify-between">
                 <h2 className="font-display text-lg font-semibold text-deep">7 Günlük</h2>
                 <span className="rounded-full bg-sky/15 px-3 py-1 text-xs font-bold text-deep">
-                  Haftalık bakış
+                  Bir güne dokun, gün içi geçişleri gör
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-7">
                 {(data?.daily.time ?? Array.from({ length: 7 })).map((t, i) => {
-                  const di = data
-                    ? weatherInfo(data.daily.weather_code[i] ?? 0, true)
-                    : info;
+                  const di = data ? weatherInfo(data.daily.weather_code[i] ?? 0, true) : info;
+                  const active = i === dayIndex;
                   return (
-                    <div
+                    <button
                       key={i}
+                      onClick={() => setDayIndex(i)}
                       className={`rounded-2xl p-4 text-center transition duration-300 hover:-translate-y-1.5 ${
-                        i === 0 ? "bg-sun/15" : "bg-white/60"
+                        active
+                          ? "bg-sun/25 ring-2 ring-sun/50"
+                          : "bg-white/60 hover:bg-sun/15"
                       }`}
                     >
                       <p className="text-xs font-bold text-deep/50">
@@ -240,7 +320,7 @@ function Index() {
                             )}°`
                           : "--° / --°"}
                       </p>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
