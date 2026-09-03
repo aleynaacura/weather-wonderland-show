@@ -47,13 +47,7 @@ export function CityPicker({ onSelect, current }: Props) {
     if (!("geolocation" in navigator)) return;
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          const near = await searchCities("");
-          void near;
-        } catch {
-          /* ignore */
-        }
+      (pos) => {
         onSelect({
           id: Date.now(),
           name: "Konumum",
