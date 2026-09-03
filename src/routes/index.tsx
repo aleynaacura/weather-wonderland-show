@@ -219,7 +219,9 @@ function Index() {
               </div>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-7">
                 {(data?.daily.time ?? Array.from({ length: 7 })).map((t, i) => {
-                  const di = data ? weatherInfo(data.daily.weather_code[i], true) : info;
+                  const di = data
+                    ? weatherInfo(data.daily.weather_code[i] ?? 0, true)
+                    : info;
                   return (
                     <div
                       key={i}
