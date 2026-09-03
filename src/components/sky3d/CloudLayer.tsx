@@ -30,7 +30,7 @@ export function CloudLayer({ color, opacity, count }: Props) {
     const g = group.current;
     if (!g) return;
     for (const child of g.children) {
-      const speed = (child.userData.speed as number) ?? 0.4;
+      const speed = (child.userData['speed'] as number) ?? 0.4;
       child.position.x += speed * dt;
       if (child.position.x > SPREAD / 2) child.position.x -= SPREAD;
     }
