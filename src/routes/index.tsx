@@ -235,8 +235,8 @@ function Index() {
                       <div className="my-3 text-4xl">{di.emoji}</div>
                       <p className="font-display text-lg font-semibold text-deep">
                         {data
-                          ? `${Math.round(data.daily.temperature_2m_max[i])}° / ${Math.round(
-                              data.daily.temperature_2m_min[i],
+                          ? `${Math.round(data.daily.temperature_2m_max[i] ?? 0)}° / ${Math.round(
+                              data.daily.temperature_2m_min[i] ?? 0,
                             )}°`
                           : "--° / --°"}
                       </p>
