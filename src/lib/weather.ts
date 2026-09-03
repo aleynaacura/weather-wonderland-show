@@ -108,5 +108,5 @@ const DAY_SHORT = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
 export function dayName(iso: string, index: number): string {
   if (index === 0) return "Bugün";
   const d = new Date(iso + "T12:00:00");
-  return DAY_SHORT[d.getDay()];
+  return DAY_SHORT[d.getDay()] ?? "";
 }
